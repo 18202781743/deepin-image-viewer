@@ -2,8 +2,9 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import QtQuick 2.11
-import QtGraphicalEffects 1.0
+import QtQuick
+import QtQuick.Effects
+import Qt5Compat.GraphicalEffects
 import org.deepin.dtk 1.0 as DTK
 import org.deepin.image.viewer 1.0 as IV
 
@@ -28,6 +29,8 @@ BaseThumbnailDelegate {
             }
 
             PropertyChanges {
+                border.width: imgRadius
+                opacity: 1
                 target: normalThumbnailDelegate.shader
                 visible: true
                 z: 1
@@ -36,14 +39,18 @@ BaseThumbnailDelegate {
     ]
 
     Item {
+        id: imageItem
+
         anchors.fill: parent
         visible: true
 
         ThumbnailImage {
             id: img
 
-            anchors.fill: parent
+            anchors.centerIn: parent
+            height: parent.height
             source: normalThumbnailDelegate.source
+            width: parent.width
         }
 
         Rectangle {
@@ -54,12 +61,41 @@ BaseThumbnailDelegate {
             visible: false
         }
 
-        OpacityMask {
-            id: imgMask
-
+        MultiEffect {
             anchors.fill: img
-            maskSource: maskRect
+            maskEnabled: true
+            maskSource: mask
             source: img
+        }
+
+        Item {
+            id: mask
+
+            height: img.height
+            layer.enabled: true
+            visible: false
+            width: img.width
+
+            Rectangle {
+                color: "black"
+                height: img.height
+                radius: 4
+                width: img.width
+            }
+        }
+    }
+
+    RotationAnimation {
+        id: rotateAnimation
+
+        duration: IV.GStatus.animationDefaultDuration
+        easing.type: Easing.OutExpo
+        target: img.image
+
+        onRunningChanged: {
+            if (!running) {
+                img.reset();
+            }
         }
     }
 
@@ -69,7 +105,8 @@ BaseThumbnailDelegate {
             // Note: 确保缓存中的数据已刷新后更新界面
             // 0 为复位，缓存中的数据已转换，无需再次加载
             if (0 !== IV.GControl.currentRotation) {
-                img.reset();
+                rotateAnimation.to = IV.GControl.currentRotation;
+                rotateAnimation.start();
             }
         }
 

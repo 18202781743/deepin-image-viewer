@@ -1,42 +1,40 @@
-// SPDX-FileCopyrightText: 2023 UnionTech Software Technology Co., Ltd.
+// SPDX-FileCopyrightText: 2023 - 2024 UnionTech Software Technology Co., Ltd.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import QtQuick 2.11
-import QtQuick.Controls 2.4
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
 import org.deepin.dtk 1.0
 
-Control {
+Item {
     id: control
 
     anchors.fill: parent
 
-    DciIcon {
-        id: openWidgetImage
-
+    ColumnLayout {
         anchors.centerIn: parent
-        // TODO: 当前图标文件存在异常，仅有亮色主题
-        name: "import_photo"
-        sourceSize.height: 128
-        sourceSize.width: 128
-        theme: DTK.themeType
-    }
+        spacing: 10
 
-    RecommandButton {
-        id: openFileBtn
+        DciIcon {
+            id: openWidgetImage
 
-        font.capitalization: Font.MixedCase
-        height: 35
-        text: qsTr("Open Image")
-        width: 300
+            Layout.alignment: Qt.AlignCenter
+            name: "import_photo"
+            sourceSize.height: 128
+            sourceSize.width: 128
+            theme: DTK.themeType
+        }
 
-        onClicked: stackView.openImageDialog()
+        RecommandButton {
+            id: openFileBtn
 
-        anchors {
-            left: openWidgetImage.left
-            leftMargin: -86
-            top: openWidgetImage.bottom
-            topMargin: 10
+            Layout.preferredHeight: 35
+            Layout.preferredWidth: 300
+            font.capitalization: Font.MixedCase
+            text: qsTr("Open Image")
+
+            onClicked: stackView.openImageDialog()
         }
     }
 }

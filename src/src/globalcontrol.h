@@ -6,17 +6,19 @@
 #define GLOBALCONTROL_H
 
 #include "imagedata/imageinfo.h"
+#include "imagedata/imagesourcemodel.h"
+#include "imagedata/pathviewproxymodel.h"
 #include "types.h"
 
 #include <QObject>
 #include <QUrl>
 #include <QBasicTimer>
 
-class ImageSourceModel;
 class GlobalControl : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(ImageSourceModel *globalModel READ globalModel NOTIFY globalModelChanged)
+    Q_PROPERTY(ImageSourceModel *globalModel READ globalModel CONSTANT)
+    Q_PROPERTY(PathViewProxyModel *viewModel READ viewModel CONSTANT)
     Q_PROPERTY(QUrl currentSource READ currentSource WRITE setCurrentSource NOTIFY currentSourceChanged)
     Q_PROPERTY(int currentIndex READ currentIndex WRITE setCurrentIndex NOTIFY currentIndexChanged)
     Q_PROPERTY(int currentFrameIndex READ currentFrameIndex WRITE setCurrentFrameIndex NOTIFY currentFrameIndexChanged)
@@ -29,10 +31,13 @@ public:
     explicit GlobalControl(QObject *parent = nullptr);
     ~GlobalControl() override;
 
-    void setGlobalModel(ImageSourceModel *model);
+    // 用于全局的图像源数据模型
     ImageSourceModel *globalModel() const;
-    Q_SIGNAL void globalModelChanged();
 
+    // 用于大图展示界面的数据
+    PathViewProxyModel *viewModel() const;
+
+    // 当前图像设置及(帧)索引变更信号
     void setCurrentSource(const QUrl &source);
     QUrl currentSource() const;
     Q_SIGNAL void currentSourceChanged();
@@ -45,11 +50,14 @@ public:
     int imageCount() const;
     Q_SIGNAL void imageCountChanged();
 
+    // 图像旋转处理
     void setCurrentRotation(int angle);
     int currentRotation();
+    Q_SIGNAL void changeRotationCacheBegin();
     Q_SIGNAL void currentRotationChanged();
     Q_SIGNAL void requestRotateCacheImage();
 
+    // 图片切换操作
     bool hasPreviousImage() const;
     Q_SIGNAL void hasPreviousImageChanged();
     bool hasNextImage() const;
@@ -59,6 +67,7 @@ public:
     Q_INVOKABLE bool firstImage();
     Q_INVOKABLE bool lastImage();
 
+    // 图像文件变更操作
     Q_SLOT void setImageFiles(const QStringList &imageFiles, const QString &openFile);
     Q_SLOT void removeImage(const QUrl &removeImage);
     Q_SLOT void renameImage(const QUrl &oldName, const QUrl &newName);
@@ -66,6 +75,7 @@ public:
     Q_SLOT void submitImageChangeImmediately();
     Q_SIGNAL void requestRotateImage(const QString &localPath, int rotation);
 
+    // 判断当前设备是否支持多线程处理
     static bool enableMultiThread();
 
 protected:
@@ -73,13 +83,15 @@ protected:
 
 private:
     void checkSwitchEnable();
+    void setIndexAndFrameIndex(int index, int frameIndex);
 
 private:
-    int index = 0;
-    int frameIndex = 0;
+    int curIndex = 0;
+    int curFrameIndex = 0;
     ImageInfo currentImage;
 
-    ImageSourceModel *sourceModel = nullptr;
+    ImageSourceModel *sourceModel { nullptr };
+    PathViewProxyModel *viewSourceModel { nullptr };
     bool hasPrevious = false;
     bool hasNext = false;
 

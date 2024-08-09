@@ -7,12 +7,14 @@
 #include "src/ocr/livetextanalyzer.h"
 #include "src/dbus/applicationadpator.h"
 #include "src/declarative/mousetrackitem.h"
+#include "src/declarative/pathviewrangehandler.h"
 #include "src/globalcontrol.h"
 #include "src/globalstatus.h"
 #include "src/types.h"
 #include "src/imagedata/imageinfo.h"
 #include "src/imagedata/imagesourcemodel.h"
 #include "src/imagedata/imageprovider.h"
+#include "src/utils/filetrashhelper.h"
 #include "config.h"
 
 #include <DApplication>
@@ -33,19 +35,19 @@ int main(int argc, char *argv[])
         qputenv("XDG_CURRENT_DESKTOP", "Deepin");
     }
 
-    // 注意:请不要管理 QGuiApplication 对象的生命周期！
-    DApplication *app = new DApplication(argc, argv);
-    app->loadTranslator();
-    app->setApplicationLicense("GPLV3");
-    app->setApplicationVersion(VERSION);
-    app->setAttribute(Qt::AA_UseHighDpiPixmaps);
-    app->setOrganizationName("deepin");
-    app->setApplicationName("deepin-image-viewer");
-    app->setApplicationDisplayName(QObject::tr("Image Viewer"));
-    app->setProductIcon(QIcon::fromTheme("deepin-image-viewer"));
-    app->setApplicationDescription(
+    DApplication app(argc, argv);
+    app.loadTranslator();
+    app.setApplicationLicense("GPLV3");
+    app.setApplicationVersion(VERSION);
+    app.setAttribute(Qt::AA_UseHighDpiPixmaps);
+    // TODO: ? 设置后在 DTK6 下菜单显示空白
+    // app.setOrganizationName("deepin");
+    app.setApplicationName("deepin-image-viewer");
+    app.setApplicationDisplayName(QObject::tr("Image Viewer"));
+    app.setProductIcon(QIcon::fromTheme("deepin-image-viewer"));
+    app.setApplicationDescription(
         QObject::tr("Image Viewer is an image viewing tool with fashion interface and smooth performance."));
-    app->setWindowIcon(QIcon::fromTheme("deepin-image-viewer"));
+    app.setWindowIcon(QIcon::fromTheme("deepin-image-viewer"));
 
     QQmlApplicationEngine engine;
 
@@ -54,9 +56,14 @@ int main(int argc, char *argv[])
     // @uri org.deepin.image.viewer
     const QString uri("org.deepin.image.viewer");
     qmlRegisterType<ImageInfo>(uri.toUtf8().data(), 1, 0, "ImageInfo");
-    qmlRegisterType<ImageSourceModel>(uri.toUtf8().data(), 1, 0, "ImageSourceModel");
+    qmlRegisterUncreatableType<ImageSourceModel>(uri.toUtf8().data(), 1, 0, "ImageSourceModel", "Use for global data");
+    qmlRegisterUncreatableType<PathViewProxyModel>(uri.toUtf8().data(), 1, 0, "PathViewProxyModel", "Use for view data");
     qmlRegisterType<MouseTrackItem>(uri.toUtf8().data(), 1, 0, "MouseTrackItem");
+    qmlRegisterType<PathViewRangeHandler>(uri.toUtf8().data(), 1, 0, "PathViewRangeHandler");
+
     qmlRegisterUncreatableType<Types>(uri.toUtf8().data(), 1, 0, "Types", "Types only use for define");
+    // 文件回收站处理
+    qmlRegisterType<FileTrashHelper>(uri.toUtf8().data(), 1, 0, "FileTrashHelper");
 
     // QML全局单例
     GlobalControl control;
@@ -137,5 +144,5 @@ int main(int argc, char *argv[])
     QDBusConnection::sessionBus().registerService("com.deepin.imageViewer");
     QDBusConnection::sessionBus().registerObject("/", &fileControl);
 
-    return app->exec();
+    return app.exec();
 }

@@ -2,14 +2,15 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import QtQuick 2.11
-import QtQuick.Controls 2.4
-import QtQuick.Layouts 1.11
-import QtGraphicalEffects 1.0
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import org.deepin.dtk 1.0
 import org.deepin.image.viewer 1.0 as IV
+import "./Dialog"
 
-Item {
+Control {
     id: thumbnailView
 
     // 除ListView外其它按键的占用宽度
@@ -21,17 +22,42 @@ Item {
     property Image targetImage
 
     function deleteCurrentImage() {
-        if (!IV.FileControl.deleteImagePath(IV.GControl.currentSource)) {
-            // 取消删除文件
-            return;
+        var trashFile = IV.GControl.currentSource;
+        if (!fileTrashHelper.fileCanTrash(trashFile)) {
+            // 无法移动到回收站，显示删除提示对话框
+            removeDialogLoader.active = true;
+        } else {
+            deleteCurrentImageImpl(false);
         }
-        IV.GControl.removeImage(IV.GControl.currentSource);
+    }
+
+    // 实际移除文件操作， directDelete：是否直接删除文件而不是移动到回收站(部分文件系统不支持)
+    function deleteCurrentImageImpl(directDelete) {
+        var trashFile = IV.GControl.currentSource;
+        if (directDelete) {
+            if (!fileTrashHelper.removeFile(trashFile)) {
+                return;
+            }
+        } else {
+            // 移动文件到回收站
+            if (!fileTrashHelper.moveFileToTrash(trashFile)) {
+                return;
+            }
+        }
+        IV.GControl.removeImage(trashFile);
+
+        // 删除最后图片，恢复到初始界面
         if (0 === IV.GControl.imageCount) {
             stackView.switchOpenImage();
         }
     }
 
     function next() {
+        if (repeatTimer.running) {
+            return;
+        }
+        repeatTimer.start();
+
         // 切换时滑动视图不响应拖拽等触屏操作
         IV.GStatus.viewInteractive = false;
         IV.GControl.nextImage();
@@ -39,17 +65,55 @@ Item {
     }
 
     function previous() {
+        if (repeatTimer.running) {
+            return;
+        }
+        repeatTimer.start();
+
         // 切换时滑动视图不响应拖拽等触屏操作
         IV.GStatus.viewInteractive = false;
         IV.GControl.previousImage();
         IV.GStatus.viewInteractive = true;
     }
 
+    Timer {
+        id: repeatTimer
+
+        // 过快切换会使显示异常，且效果不佳
+        interval: 100
+    }
+
+    // 用于文件移动至回收站/删除的辅助类
+    IV.FileTrashHelper {
+        id: fileTrashHelper
+
+    }
+
+    // 删除确认对话框加载器
+    Loader {
+        id: removeDialogLoader
+
+        active: false
+        asynchronous: true
+
+        sourceComponent: RemoveDialog {
+            fileName: IV.FileControl.slotGetFileNameSuffix(IV.GControl.currentSource)
+
+            onFinished: {
+                if (ret) {
+                    thumbnailView.deleteCurrentImageImpl(true);
+                }
+                // 使用后释放对话框
+                removeDialogLoader.active = false;
+            }
+        }
+    }
+
     Binding {
         delayed: true
         property: "thumbnailVaildWidth"
         target: IV.GStatus
-        value: window.width - 20 - thumbnailListView.btnContentWidth
+        value: window.width - 20 - btnContentWidth
     }
 
     Row {
@@ -82,7 +146,9 @@ Item {
             Shortcut {
                 sequence: "Left"
 
-                onActivated: previous()
+                onActivated: {
+                    previous();
+                }
             }
         }
 
@@ -183,13 +249,16 @@ Item {
         property bool lastIsMultiImage: false
 
         // 重新定位图片位置
-        function rePositionView() {
+        function rePositionView(force) {
             // 特殊处理，防止默认显示首个缩略图时采用Center的策略会被遮挡部分
-            if (0 === currentIndex) {
-                positionViewAtBeginning();
-            } else {
+            if (force) {
+                // 不再默认居中，允许在范围内切换
                 // 尽可能将高亮缩略图显示在列表中
                 positionViewAtIndex(currentIndex, ListView.Center);
+            } else if (0 === currentIndex) {
+                positionViewAtBeginning();
+            } else if (currentIndex === count - 1) {
+                positionViewAtEnd();
             }
         }
 
@@ -198,18 +267,58 @@ Item {
         focus: true
         height: thumbnailView.height + 10
         highlightFollowsCurrentItem: true
-        // 使用范围模式，允许高亮缩略图在preferredHighlightBegin~End的范围外，使缩略图填充空白区域
+        // 禁用ListView自带的动画效果，但仍需要 highlight 机制使图片切换后显示在可见范围
+        highlightMoveDuration: 200
+        highlightMoveVelocity: -1
+        // 使用范围模式，允许高亮缩略图在 preferredHighlightBegin ~ End 的范围外，使缩略图填充空白区域
         highlightRangeMode: ListView.ApplyRange
         model: IV.GControl.globalModel
         orientation: Qt.Horizontal
-        preferredHighlightBegin: width / 2 - 25
-        preferredHighlightEnd: width / 2 + 25
+        preferredHighlightBegin: width / 2
+        preferredHighlightEnd: width / 2
         spacing: 4
         width: thumbnailView.width - thumbnailView.btnContentWidth
 
+        // 用于图片变更，缩略图跳变(非左右侧图片)切换时的动画效果
+        Behavior on currentIndex {
+            id: indexChangeBehavior
+
+            ParallelAnimation {
+                onRunningChanged: {
+                    // 进入退出时均捕获当前列表显示状态
+                    fadeOutEffect.scheduleUpdate();
+                    if (running) {
+                        fadeOutEffect.visible = true;
+                    } else {
+                        fadeOutEffect.visible = false;
+                    }
+                }
+
+                // 淡出
+                NumberAnimation {
+                    duration: IV.GStatus.animationDefaultDuration
+                    easing.type: Easing.OutExpo
+                    from: 1
+                    property: "opacity"
+                    target: fadeOutEffect
+                    to: 0
+                }
+
+                // 淡入
+                NumberAnimation {
+                    duration: IV.GStatus.animationDefaultDuration
+                    easing.type: Easing.OutExpo
+                    from: 0
+                    property: "opacity"
+                    target: bottomthumbnaillistView
+                    to: 1
+                }
+            }
+        }
         delegate: Loader {
             id: thumbnailItemLoader
 
+            property alias frameCount: imageInfo.frameCount
             property url imageSource: model.imageUrl
 
             active: true
@@ -288,7 +397,7 @@ Item {
         Component.onCompleted: {
             bottomthumbnaillistView.currentIndex = IV.GControl.currentIndex;
             forceLayout();
-            rePositionView();
+            rePositionView(true);
         }
 
         //滑动联动主视图
@@ -296,9 +405,6 @@ Item {
             if (currentItem) {
                 currentItem.forceActiveFocus();
             }
-
-            // 直接定位，屏蔽动画效果
-            rePositionView();
 
             // 仅在边缘缩略图时进行二次定位
             if (0 === currentIndex || currentIndex === (count - 1)) {
@@ -314,7 +420,15 @@ Item {
 
         Connections {
             function onCurrentIndexChanged() {
+                // 切换的图片为左右两侧时，不触发跳变动画
+                var disableBehavior = Boolean(1 === Math.abs(IV.GControl.currentIndex - bottomthumbnaillistView.currentIndex));
+                if (disableBehavior) {
+                    indexChangeBehavior.enabled = false;
+                }
                 bottomthumbnaillistView.currentIndex = IV.GControl.currentIndex;
+                if (disableBehavior) {
+                    indexChangeBehavior.enabled = true;
+                }
             }
 
             target: IV.GControl
@@ -345,9 +459,23 @@ Item {
 
             onTriggered: {
                 bottomthumbnaillistView.forceLayout();
-                bottomthumbnaillistView.rePositionView();
+                bottomthumbnaillistView.rePositionView(false);
             }
         }
+    }
+
+    // 捕获列表Item，用于跳变切换图片时淡入淡出效果
+    ShaderEffectSource {
+        id: fadeOutEffect
+
+        anchors.fill: bottomthumbnaillistView
+        hideSource: false
+        // 不自动刷新，使用 scheduleUpdate() 刷新显示状态
+        live: false
+        recursive: false
+        sourceItem: bottomthumbnaillistView
+        visible: true
+        z: 1
     }
 
     Row {

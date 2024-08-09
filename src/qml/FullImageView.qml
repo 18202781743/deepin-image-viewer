@@ -1,10 +1,13 @@
-// SPDX-FileCopyrightText: 2023 UnionTech Software Technology Co., Ltd.
+// SPDX-FileCopyrightText: 2023 - 2024 UnionTech Software Technology Co., Ltd.
+//
 // SPDX-License-Identifier: GPL-3.0-or-later
-import QtQuick 2.11
-import QtQuick.Controls 2.4
-import QtQuick.Window 2.11
-import QtGraphicalEffects 1.0
+
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Window
+import Qt5Compat.GraphicalEffects
 import org.deepin.dtk 1.0
+import org.deepin.dtk.style 1.0 as DS
 import org.deepin.image.viewer 1.0 as IV
 import "./Utils"
 
@@ -15,7 +18,7 @@ Item {
     property bool enableAnimation: false
 
     // 鼠标是否进入当前的视图
-    property bool isEnterCurrentView: true
+    property bool isEnterCurrentView: false
     // 是否标题栏和底栏需要隐藏(仅判断普通模式)
     property bool needBarHideInNormalMode: false
 
@@ -46,7 +49,12 @@ Item {
             // 显示图像的组件高度(组件高度不会随着缩放变更，是组件在布局内的高度)
             var imageCompoHeight = imageViewer.targetImage.height;
             imageScaleNeedShow = Boolean(imagePaintedHeight <= imageCompoHeight);
+
+            // 设置标题栏的状态，是否图片已缩放到标题栏部分
+            titleRect.imageScaledToTitle = !imageScaleNeedShow;
         }
+
+        // 判断标题栏和底栏的计算
         if (window.isFullScreen) {
             // 全屏时特殊处理
             if (mouseY > bottomHotspotHeight) {
@@ -62,7 +70,7 @@ Item {
                 // 窗口大小大于最小大小，光标不在热区内
                 needShowTopBottom = false;
             } else if (imageScaleNeedShow) {
-                // 缩放范围高度未超过显示范围高度限制时时，不会隐藏工具/标题栏，根据高度而非宽度计算
+                // 缩放范围高度未超过显示范围高度限制时，不会隐藏工具/标题栏，根据高度而非宽度计算
                 needShowTopBottom = true;
             } else if (cursorInWidnow && ((mouseY > bottomHotspotHeight && mouseY <= Window.height) || (0 < mouseY && mouseY < IV.GStatus.titleHeight))) {
                 // 当缩放范围超过工具/标题栏且光标在工具/标题栏范围，显示工具/标题栏
@@ -287,7 +295,6 @@ Item {
         property bool usingCapture: false // 是否使用定时捕获光标位置
 
         acceptedButtons: Qt.LeftButton
-        anchors.fill: imageViewer
         hoverEnabled: true
 
         onEntered: {
@@ -302,9 +309,15 @@ Item {
             IV.CursorTool.setCaptureCursor(true);
             imageViewerArea.usingCapture = true;
         }
-        onMouseYChanged: {
+        onMouseYChanged: mouse => {
             animationAll();
             mouse.accepted = false;
+        }
+
+        // NOTE: 不能遮挡顶部标题栏，否则无法传递鼠标消息到底部组件移动窗口
+        anchors {
+            fill: imageViewer
+            topMargin: IV.GStatus.titleHeight
         }
 
         Connections {
@@ -329,7 +342,7 @@ Item {
         }
     }
 
-    FloatingPanel {
+    ThumbnailListView {
         id: thumbnailViewBackGround
 
         property bool animationShow: true
@@ -338,30 +351,42 @@ Item {
             thumbnailViewBackGround.y = animationShow ? Window.height - IV.GStatus.showBottomY : Window.height;
         }
 
-        anchors.right: parent.right
-        anchors.rightMargin: (parent.width - width) / 2
+        anchors.horizontalCenter: parent.horizontalCenter
         height: 70
+        targetImage: imageViewer.targetImage
         // 根据拓展的列表宽度计算, 20px为工具栏和主窗口间的间距 2x10px
-        width: parent.width - 20 < thumbnailListView.btnContentWidth + thumbnailListView.listContentWidth ? parent.width - 20 : thumbnailListView.btnContentWidth + thumbnailListView.listContentWidth
+        width: parent.width - 20 < btnContentWidth + listContentWidth ? parent.width - 20 : btnContentWidth + listContentWidth
         y: Window.height - IV.GStatus.showBottomY
 
+        background: FloatingPanel {
+            id: control
+
+            implicitHeight: 70
+        }
         Behavior on y {
             enabled: fullThumbnail.enableAnimation
 
             NumberAnimation {
-                duration: 200
-                easing.type: Easing.InOutQuad
+                duration: 366
+                easing.type: Easing.OutExpo
             }
         }
 
-        onAnimationShowChanged: updatePosition()
-    }
+        onAnimationShowChanged: {
+            if (animationShow) {
+                updatePosition();
+            } else {
+                animationQuitDelay.restart();
+            }
+        }
 
-    ThumbnailListView {
-        id: thumbnailListView
+        Timer {
+            id: animationQuitDelay
 
-        anchors.fill: thumbnailViewBackGround
-        targetImage: imageViewer.targetImage
+            interval: 500
+
+            onTriggered: thumbnailViewBackGround.updatePosition()
+        }
     }
 
     //浮动提示框

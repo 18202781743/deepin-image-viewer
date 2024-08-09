@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import QtQuick 2.11
+import QtQuick
 import org.deepin.image.viewer 1.0 as IV
 
 Item {
@@ -19,16 +19,30 @@ Item {
         var temp = contentImage.source;
         contentImage.source = "";
         contentImage.source = temp;
+        contentImage.rotation = 0;
     }
+
+    clip: true
 
     Image {
         id: contentImage
 
-        anchors.fill: thumbnailImage
+        anchors.centerIn: thumbnailImage
         asynchronous: true
         cache: false
         fillMode: Image.PreserveAspectCrop
-        smooth: false
+        height: thumbnailImage.height
+        // 用于在旋转过程中不显示白边，图片大小比例 1 -> sqrt(2) -> 1
+        scale: {
+            if (0 === rotation) {
+                return 1;
+            }
+            var normalRotation = (Math.abs(rotation) % 90);
+            var ratio = (normalRotation < 45) ? (normalRotation / 45) : ((90 - normalRotation) / 45);
+            return 1 + ((Math.sqrt(2) - 1) * ratio);
+        }
+        smooth: true
+        width: thumbnailImage.width
     }
 
     // 使用 ImageInfo 控制加载状态

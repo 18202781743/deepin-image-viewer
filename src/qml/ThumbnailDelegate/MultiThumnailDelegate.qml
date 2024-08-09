@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import QtQuick 2.11
+import QtQuick
 import org.deepin.image.viewer 1.0 as IV
 
 // 用于多页图的缩略图代理
@@ -25,8 +25,6 @@ BaseThumbnailDelegate {
 
     height: 50
     imgRadius: 4
-    shader.visible: true
-    shader.z: 1
     y: 15
 
     // NOTE: 直接设置宽度将被Loader宽度覆盖，使用状态可同时取得动画效果
@@ -38,6 +36,15 @@ BaseThumbnailDelegate {
             PropertyChanges {
                 target: multiThumnailDelegate
                 width: multiThumnailDelegate.requestWidth
+                z: 2
+            }
+
+            PropertyChanges {
+                border.width: imgRadius
+                opacity: 1
+                target: multiThumnailDelegate.shader
+                visible: true
+                z: 1
             }
         }
     ]

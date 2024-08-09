@@ -2,10 +2,12 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import QtQuick 2.11
-import QtQuick.Window 2.11
+import QtQuick
+import QtQuick.Window
 import org.deepin.image.viewer 1.0 as IV
 
+// TODO: 旧版由于 tiff 图片特殊处理，部分 Delegate 单独设置了 ImageInputHandler
+//      后续应移动至外部，无需重复创建
 Item {
     id: imageInput
 
@@ -77,6 +79,7 @@ Item {
         anchors.fill: parent
         drag.axis: Drag.XAndYAxis
         drag.target: targetImage ? targetImage : undefined
+        propagateComposedEvents: true
 
         onDoubleClicked: {
             if (IV.GStatus.stackPage === IV.Types.ImageViewPage) {
@@ -84,12 +87,14 @@ Item {
                 IV.GStatus.showFullScreen = !IV.GStatus.showFullScreen;
             }
         }
-        onPressed: {
+        onPressAndHold: {
+        }
+        onPressed: mouse => {
             if (Qt.RightButton === mouse.button) {
                 IV.GStatus.showRightMenu = true;
             }
         }
-        onWheel: {
+        onWheel: wheel => {
             if (null === imageInput.targetImage) {
                 return;
             }

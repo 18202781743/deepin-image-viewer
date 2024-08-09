@@ -2,14 +2,15 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import QtQuick 2.11
-import QtQuick.Window 2.11
-import QtQuick.Controls 2.4
-import QtQuick.Controls.Styles 1.2
-import QtGraphicalEffects 1.0
+import QtQuick
+import QtQuick.Window
+import QtQuick.Controls
+import Qt5Compat.GraphicalEffects
 import org.deepin.image.viewer 1.0 as IV
 
 Item {
+    id: navigation
+
     property bool enableRefresh: true
     property bool imageNeedNavi: false
     property real imgBottom: 0
@@ -17,8 +18,15 @@ Item {
     property real imgLeft: 0
     property real imgRight: 0
     property real imgTop: 0
+    // 用于动画控制，预期的隐藏动作(用于触发缩放动效时同步导航窗口的处理)
+    property real prefferHide: 0
+    // 期望是否显示，同时控制动画效果
+    property bool prefferVisible: IV.GStatus.enableNavigation && imageNeedNavi
     // 指向的图片对象
     property Image targetImage
+
+    // 请求释放信号，长时间不使用的导航窗口将请求销毁
+    signal requestRelease
 
     function refreshNaviMask() {
         if (enableRefresh) {
@@ -28,6 +36,17 @@ Item {
 
     function refreshNaviMaskImpl() {
         if (!targetImage) {
+            imageNeedNavi = false;
+            return;
+        }
+        // 预期的缩放比例小于1时不进行显示
+        if (prefferHide) {
+            imageNeedNavi = false;
+            return;
+        }
+
+        // 窗口小于最小尺寸时导航功能不可用
+        if (!(window.height > IV.GStatus.minHideHeight && window.width > IV.GStatus.minWidth)) {
             imageNeedNavi = false;
             return;
         }
@@ -97,9 +116,56 @@ Item {
         enableRefresh = true;
     }
 
+    // 默认属性为 hide 状态，切换显示状态时将自动动画，Y轴坐标由外部设置
+
     height: 112
-    visible: IV.GStatus.enableNavigation && imageNeedNavi
+    opacity: 0.3
+    scale: 0.3
+    visible: false
     width: 150
+
+    states: [
+        State {
+            name: "show"
+            when: prefferVisible
+
+            PropertyChanges {
+                opacity: 1
+                scale: 1
+                target: navigation
+                x: 0
+                y: 0
+            }
+        }
+    ]
+    transitions: Transition {
+        id: animtionTrans
+
+        reversible: true
+        to: "show"
+
+        onRunningChanged: {
+            if (running) {
+                visible = true;
+            } else {
+                // 动画结束再隐藏
+                visible = prefferVisible;
+            }
+
+            // 隐藏的导航窗口在一段时间后释放
+            if (!visible) {
+                delayReleaseTimer.restart();
+            } else {
+                delayReleaseTimer.stop();
+            }
+        }
+
+        NumberAnimation {
+            duration: 366
+            easing.type: Easing.OutExpo
+            properties: "x,y,scale,opacity"
+        }
+    }
 
     onTargetImageChanged: {
         if (targetImage) {
@@ -114,6 +180,15 @@ Item {
     }
 
     Timer {
+        id: delayReleaseTimer
+
+        interval: 5000
+        repeat: false
+
+        onTriggered: navigation.requestRelease()
+    }
+
+    Timer {
         id: delayRefreshTimer
 
         interval: 1
@@ -123,15 +198,29 @@ Item {
     }
 
     Connections {
+        function onPaintedHeightChanged() {
+            refreshNaviMask();
+        }
+
+        function onPaintedWidthChanged() {
+            refreshNaviMask();
+        }
+
+        function onScaleChanged() {
+            refreshNaviMask();
+        }
+
+        function onXChanged() {
+            refreshNaviMask();
+        }
+
+        function onYChanged() {
+            refreshNaviMask();
+        }
+
         enabled: undefined !== targetImage && enableRefresh
         ignoreUnknownSignals: true
         target: undefined === targetImage ? null : targetImage
-
-        onPaintedHeightChanged: refreshNaviMask()
-        onPaintedWidthChanged: refreshNaviMask()
-        onScaleChanged: refreshNaviMask()
-        onXChanged: refreshNaviMask()
-        onYChanged: refreshNaviMask()
     }
 
     // 背景图片绘制区域
@@ -160,7 +249,8 @@ Item {
             fillMode: Image.PreserveAspectFit
             source: "image://ImageLoad/" + IV.GControl.currentSource + "#frame_" + IV.GControl.currentFrameIndex
 
-            onStatusChanged: {
+            // QML6 Image Ready 时 paintedGeometry 不一定更新，调整 onStatusChanged 为 onPaintedGeometryChanged
+            onPaintedGeometryChanged: {
                 if (Image.Ready === status) {
                     imgLeft = (currentImage.width - currentImage.paintedWidth) / 2;
                     imgTop = (currentImage.height - currentImage.paintedHeight) / 2;

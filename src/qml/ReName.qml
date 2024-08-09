@@ -2,10 +2,10 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import QtQuick 2.11
-import QtQuick.Window 2.10
-import QtQuick.Controls 2.4
-import QtQuick.Layouts 1.11
+import QtQuick
+import QtQuick.Window
+import QtQuick.Controls
+import QtQuick.Layouts
 import org.deepin.dtk 1.0
 import org.deepin.image.viewer 1.0 as IV
 
@@ -29,7 +29,6 @@ DialogWindow {
 
     flags: Qt.Window | Qt.WindowCloseButtonHint | Qt.WindowStaysOnTopHint
     height: 180
-    icon: "deepin-image-viewer"
     maximumHeight: 180
     maximumWidth: 400
     minimumHeight: 180
@@ -37,6 +36,14 @@ DialogWindow {
     modality: Qt.WindowModal
     visible: false
     width: 400
+
+    // 调整默认的 titlebar
+    header: DialogTitleBar {
+        enableInWindowBlendBlur: true
+        // 仅保留默认状态，否则 hover 上会有变化效果
+        icon.mode: DTK.NormalState
+        icon.name: "deepin-image-viewer"
+    }
 
     onVisibleChanged: {
         if (visible) {
@@ -83,11 +90,11 @@ DialogWindow {
         showAlert: IV.FileControl.isShowToolTip(IV.GControl.currentSource, nameedit.text)
         width: 380
 
-        validator: RegExpValidator {
-            regExp: /^[^ \\.\\\\/\':\\*\\?\"<>|%&][^\\\\/\':\\*\\?\"<>|%&]*/
+        validator: RegularExpressionValidator {
+            regularExpression: /^[^ \\.\\\\/\':\\*\\?\"<>|%&][^\\\\/\':\\*\\?\"<>|%&]*/
         }
 
-        Keys.onPressed: event => {
+        Keys.onPressed: {
             switch (event.key) {
             case Qt.Key_Return:
             case Qt.Key_Enter:
@@ -110,7 +117,6 @@ DialogWindow {
     Button {
         id: cancelbtn
 
-        font.pixelSize: 16
         height: 36
         text: qsTr("Cancel")
         width: 185
